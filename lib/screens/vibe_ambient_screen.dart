@@ -3,17 +3,49 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import '../models/vibe.dart';
+import '../services/sound_manager.dart';
 import '../widgets/animated_background.dart';
+import 'breathing_overlay.dart';
 
 /// Full-screen ambient mode for the selected vibe:
-/// animated gradient, floating dust, big emoji and a glass quote panel.
-class VibeAmbientScreen extends StatelessWidget {
+/// animated gradient, soundscape, glass quote panel, mute toggle
+/// and an optional guided breathing session.
+class VibeAmbientScreen extends StatefulWidget {
   final Vibe vibe;
 
   const VibeAmbientScreen({super.key, required this.vibe});
 
   @override
+  State<VibeAmbientScreen> createState() => _VibeAmbientScreenState();
+}
+
+class _VibeAmbientScreenState extends State<VibeAmbientScreen> {
+  bool _breathing = false;
+  bool _muted = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _muted = SoundManager.instance.muted;
+    SoundManager.instance.playVibe(widget.vibe.id);
+  }
+
+  @override
+  void dispose() {
+    SoundManager.instance.stop();
+    super.dispose();
+  }
+
+  Future<void> _toggleMute() async {
+    await SoundManager.instance.toggleMute();
+    if (mounted) {
+      setState(() => _muted = SoundManager.instance.muted);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final vibe = widget.vibe;
     return Scaffold(
       backgroundColor: vibe.gradient.first,
       body: Stack(
@@ -31,6 +63,11 @@ class VibeAmbientScreen extends StatelessWidget {
                         onTap: () => Navigator.of(context).maybePop(),
                       ),
                       const Spacer(),
+                      _GlassButton(
+                        icon: _muted ? Icons.volume_off : Icons.volume_up,
+                        onTap: _toggleMute,
+                      ),
+                      const SizedBox(width: 12),
                       Text(
                         vibe.emoji,
                         style: const TextStyle(fontSize: 26),
@@ -69,7 +106,7 @@ class VibeAmbientScreen extends StatelessWidget {
                       fontSize: 15,
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 28),
                   ClipRRect(
                     borderRadius: BorderRadius.circular(24),
                     child: BackdropFilter(
@@ -110,6 +147,42 @@ class VibeAmbientScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 24),
+                  // Breathing session entry
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(30),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                      child: Material(
+                        color: Colors.white.withOpacity(0.12),
+                        child: InkWell(
+                          onTap: () => setState(() => _breathing = true),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 22,
+                              vertical: 12,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.self_improvement,
+                                    color: vibe.accent, size: 20),
+                                const SizedBox(width: 10),
+                                const Text(
+                                  'breathe with me',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                   const Spacer(),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -130,13 +203,18 @@ class VibeAmbientScreen extends StatelessWidget {
               ),
             ),
           ),
+          if (_breathing)
+            BreathingOverlay(
+              vibe: vibe,
+              onClose: () => setState(() => _breathing = false),
+            ),
         ],
       ),
     );
   }
 }
 
-/// Round glassmorphic button used for the back action.
+/// Round glassmorphic button used in the top bar.
 class _GlassButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
